@@ -6,6 +6,7 @@ import TeleporterManager from '../objects/TeleporterManager';
 import InteractionManager from '../objects/InteractManager';
 import LegendUI from '../ui/LegendUI';
 import { EventBus } from '../EventBus';
+import WebSocketBridge from '../services/WebSocketBridge';
 
 /**
  * BaseScene centralise la logique commune : carte, joueur, téléporteurs,
@@ -24,6 +25,7 @@ export default class BaseScene extends Scene {
         this.mapData = mapData;
         this.debug = debug;
         this.enableChatbot = enableChatbot;
+        this.isMultiplayerChatOpen = false;
         this.player = null;
         this.gameMap = null;
         this.teleporterManager = null;
@@ -110,10 +112,37 @@ export default class BaseScene extends Scene {
         };
 
         this.input.keyboard.on('keydown-C', this.chatbotEventHandlers.onKeyC);
+
+        this.isMultiplayerChatOpen = false;
+
+        this.chatbotEventHandlers.onMultiplayerChatOpened = () => {
+            console.log('Chat multijoueur ouvert - Désactivation des contrôles Phaser');
+            this.isMultiplayerChatOpen = true;
+            this._disablePhaserControls();
+        };
+
+        this.chatbotEventHandlers.onMultiplayerChatClosed = () => {
+            console.log('Chat multijoueur fermé - Réactivation des contrôles Phaser');
+            this.isMultiplayerChatOpen = false;
+            this._enablePhaserControls();
+        };
+
+        EventBus.on('multiplayer-chat-opened', this.chatbotEventHandlers.onMultiplayerChatOpened);
+        EventBus.on('multiplayer-chat-closed', this.chatbotEventHandlers.onMultiplayerChatClosed);
+
+        // NOUVEAU : Raccourci clavier pour le chat multijoueur (Touche M)
+        this.chatbotEventHandlers.onKeyM = (event) => {
+            if (!this.isChatbotOpen && !this.isMultiplayerChatOpen) {
+                console.log('Touche M pressée - Toggle chat multijoueur');
+                EventBus.emit('multiplayer-chat-toggle');
+            }
+        };
+
+        this.input.keyboard.on('keydown-M', this.chatbotEventHandlers.onKeyM);
     }
 
     /**
-     * Désactive les contrôles Phaser quand le chatbot est ouvert
+     * Désactive les contrôles Phaser quand le chatbot ou le chat multi est ouvert
      */
     _disablePhaserControls() {
         if (this.player) {
@@ -123,12 +152,17 @@ export default class BaseScene extends Scene {
         this.input.keyboard.removeAllListeners();
         
         this.input.keyboard.on('keydown-ESC', () => {
-            EventBus.emit('chatbot-close');
+            if (this.isChatbotOpen) {
+                EventBus.emit('chatbot-close');
+            }
+            if (this.isMultiplayerChatOpen) {
+                EventBus.emit('multiplayer-chat-close');
+            }
         });
     }
 
     /**
-     * Réactive les contrôles Phaser quand le chatbot se ferme
+     * Réactive les contrôles Phaser quand le chatbot ou le chat multi se ferme
      */
     _enablePhaserControls() {
         if (this.player) {
@@ -139,6 +173,7 @@ export default class BaseScene extends Scene {
         
         if (this.enableChatbot) {
             this.input.keyboard.on('keydown-C', this.chatbotEventHandlers.onKeyC);
+            this.input.keyboard.on('keydown-M', this.chatbotEventHandlers.onKeyM);
         }
 
         if (this.debug) {
@@ -158,7 +193,7 @@ export default class BaseScene extends Scene {
 
     update() {
         // Ne traiter les inputs que si le chatbot n'est pas ouvert
-        if (!this.isChatbotOpen) {
+        if (!this.isChatbotOpen && !this.isMultiplayerChatOpen) {
             if (this.player) this.player.handleInput(this.cursors);
             if (this.interactionManager) this.interactionManager.update();
         }
@@ -326,6 +361,13 @@ export default class BaseScene extends Scene {
         }
         if (this.chatbotEventHandlers.onChatbotClosed) {
             EventBus.off('chatbot-closed', this.chatbotEventHandlers.onChatbotClosed);
+        }
+
+        if (this.chatbotEventHandlers.onMultiplayerChatOpened) {
+            EventBus.off('multiplayer-chat-opened', this.chatbotEventHandlers.onMultiplayerChatOpened);
+        }
+        if (this.chatbotEventHandlers.onMultiplayerChatClosed) {
+            EventBus.off('multiplayer-chat-closed', this.chatbotEventHandlers.onMultiplayerChatClosed);
         }
         
         this.colliders.forEach(collider => {

@@ -15,7 +15,6 @@ const ChatbotComponent = ({ isVisible, onClose }) => {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Scroll automatique vers le bas
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -24,7 +23,6 @@ const ChatbotComponent = ({ isVisible, onClose }) => {
     scrollToBottom();
   }, [messages]);
 
-  // Focus sur l'input quand le chatbot s'ouvre
   useEffect(() => {
     if (isVisible && inputRef.current) {
       inputRef.current.focus();
@@ -46,7 +44,6 @@ const ChatbotComponent = ({ isVisible, onClose }) => {
     setIsTyping(true);
 
     try {
-      // Utiliser votre ChatbotService existant via le bridge
       const response = await ChatbotServiceBridge.sendMessage(userMessage.text);
       
       const sageMessage = {
@@ -78,20 +75,16 @@ const ChatbotComponent = ({ isVisible, onClose }) => {
       e.preventDefault();
       handleSendMessage();
     }
-    // Empêcher la propagation vers Phaser pour tous les événements clavier
     e.stopPropagation();
   };
 
-  // Empêcher aussi la propagation sur keydown pour éviter les conflits
   const handleKeyDown = (e) => {
     e.stopPropagation();
   };
 
   const clearConversation = () => {
-    // Vider l'historique du service
     ChatbotServiceBridge.clearHistory();
     
-    // Réinitialiser l'interface
     setMessages([
       {
         id: Date.now(),
