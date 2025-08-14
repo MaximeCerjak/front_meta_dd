@@ -1,0 +1,40 @@
+{
+    "start": {
+        "text": "Bienvenue au guichet ! C'est votre première fois ici ?",
+        "options": [
+            { "text": "Oui", "next": "unknowUser", "action": "unknow" },
+            { "text": "Non", "next": "knowUser", "action": "know" },
+            { "text": "Au revoir, je ne suis pas intéressé", "action": "close-dialogue" }
+        ]
+    },
+    "knowUser": {
+        "text": "Je me disais bien que j'avais déjà vu votre tête !",
+        "options": [
+            { "text": "Je n'ai pas le temps", "next": "login" },
+            { "text": "Je me suis trompé, je suis nouveau ici...", "next": "signup" },
+            { "text": "Au revoir, je ne suis plus intéressé", "action": "close-dialogue" }
+        ]
+    },
+    "unknowUser": {
+        "text": "Enchanté de vous rencontrer !",
+        "options": [
+            { "text": "Moi de même, puis je m'inscrire ?", "next": "signup" },
+            { "text": "On s'est déjà vu en réalité, j'ai déjà un compte.", "next": "login" },
+            { "text": "Au revoir, je ne suis pas intéressé", "action": "close-dialogue" }
+        ]
+    },
+    "login": {
+        "text": "Pas de soucis, je vais vous demander votre nom et votre mot de passe pour vous identifier.",
+        "options": [
+            { "text": "D'accord", "action": "login" },
+            { "text": "Plus tard, peut être.", "action": "close-dialogue" }
+        ]
+    },
+    "signup": {
+        "text": "Pas de soucis, je vais vous demander votre nom et votre mot de passe pour vous inscrire.",
+        "options": [
+            { "text": "Ok", "action": "signup" },
+            { "text": "Plus tard, peut être.", "action": "close-dialogue" }
+        ]
+    }
+}
