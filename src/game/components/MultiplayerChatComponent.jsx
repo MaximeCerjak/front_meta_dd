@@ -1,6 +1,6 @@
-// src/game/components/MultiplayerChatComponent.jsx - VERSION COHÉRENTE
+// src/game/components/MultiplayerChatComponent.jsx 
 import React, { useState, useRef, useEffect } from 'react';
-import WebSocketBridge from '../services/WebSocketBridge'; // Import direct comme ChatbotServiceBridge
+import WebSocketBridge from '../services/WebSocketBridge'; 
 
 const MultiplayerChatComponent = ({ isVisible, onClose }) => {
   const [messages, setMessages] = useState([]);
@@ -12,6 +12,8 @@ const MultiplayerChatComponent = ({ isVisible, onClose }) => {
   const [chatFilter, setChatFilter] = useState('global');
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  
+  // Références pour gérer les timeouts
 
   // Scroll automatique vers le bas
   const scrollToBottom = () => {
@@ -95,9 +97,42 @@ const MultiplayerChatComponent = ({ isVisible, onClose }) => {
     }
   };
 
+  // Références pour gérer les timeouts
+  const simulationTimeouts = useRef([]);
+  const continuousSimulation = useRef(null);
+
+  // Nettoyer les timeouts au démontage ou fermeture
+  useEffect(() => {
+    return () => {
+      // Nettoyer tous les timeouts
+      simulationTimeouts.current.forEach(timeout => clearTimeout(timeout));
+      simulationTimeouts.current = [];
+      
+      if (continuousSimulation.current) {
+        clearInterval(continuousSimulation.current);
+        continuousSimulation.current = null;
+      }
+    };
+  }, []);
+
+  // Nettoyer si le chat se ferme
+  useEffect(() => {
+    if (!isVisible) {
+      simulationTimeouts.current.forEach(timeout => clearTimeout(timeout));
+      simulationTimeouts.current = [];
+      
+      if (continuousSimulation.current) {
+        clearInterval(continuousSimulation.current);
+        continuousSimulation.current = null;
+      }
+    }
+  }, [isVisible]);
+
   // Simulation de messages automatiques (directement dans le composant)
   const startMessageSimulation = () => {
-    const simulatedMessages = [
+    console.log('MultiplayerChat - Démarrage de la simulation de messages');
+    
+    const initialMessages = [
       { text: "Salut ! Quelqu'un a vu la nouvelle exposition ?", delay: 3000 },
       { text: "Cette œuvre de Van Gogh est magnifique !", delay: 8000 },
       { text: "Est-ce que quelqu'un peut m'aider à trouver la salle Renaissance ?", delay: 15000 },
@@ -109,12 +144,27 @@ const MultiplayerChatComponent = ({ isVisible, onClose }) => {
       { name: 'Alice', avatar: '🎨', scene: 'Museumreception' },
       { name: 'Bob', avatar: '🖼️', scene: 'Exhibitionroom' },
       { name: 'Charlie', avatar: '🏛️', scene: 'Welcomeisle' },
-      { name: 'Diana', avatar: '🎭', scene: 'Intro' }
+      { name: 'Diana', avatar: '🎭', scene: 'Intro' },
+      { name: 'Eve', avatar: '🖌️', scene: 'Sandbox' }
     ];
 
-    simulatedMessages.forEach((msgData, index) => {
-      setTimeout(() => {
-        if (isConnected) { // Vérifier qu'on est toujours connecté
+    const continuousMessages = [
+      "Quelqu'un connaît l'histoire de ce tableau ?",
+      "Cette exposition temporaire vaut vraiment le détour !",
+      "Les détails de cette fresque sont saisissants",
+      "Je recommande vraiment cette section égyptienne",
+      "Cette reconstitution 3D est bluffante",
+      "Le guide audio est vraiment bien fait",
+      "Cette peinture me rappelle mes cours d'art",
+      "Qui veut explorer la galerie moderne ensemble ?",
+      "Merci pour l'explication, très intéressant !",
+      "Cette architecture gothique est impressionnante"
+    ];
+
+    // Messages initiaux programmés
+    initialMessages.forEach((msgData, index) => {
+      const timeout = setTimeout(() => {
+        if (isConnected && isVisible) {
           const randomPlayer = players[Math.floor(Math.random() * players.length)];
           
           const simulatedMessage = {
@@ -129,10 +179,43 @@ const MultiplayerChatComponent = ({ isVisible, onClose }) => {
             isOwn: false
           };
           
+          console.log('MultiplayerChat - Message simulé envoyé:', simulatedMessage.content);
           setMessages(prev => [...prev, simulatedMessage]);
         }
       }, msgData.delay);
+      
+      // Stocker le timeout pour pouvoir le nettoyer
+      simulationTimeouts.current.push(timeout);
     });
+
+    // Simulation continue après les messages initiaux
+    const startContinuousSimulation = () => {
+      continuousSimulation.current = setInterval(() => {
+        if (isConnected && isVisible && Math.random() > 0.6) { // 40% de chance
+          const randomPlayer = players[Math.floor(Math.random() * players.length)];
+          const randomMessage = continuousMessages[Math.floor(Math.random() * continuousMessages.length)];
+          
+          const simulatedMessage = {
+            id: 'continuous_' + Date.now() + '_' + Math.random(),
+            senderId: randomPlayer.name.toLowerCase() + '_continuous',
+            senderName: randomPlayer.name,
+            senderAvatar: randomPlayer.avatar,
+            content: randomMessage,
+            type: 'global',
+            scene: randomPlayer.scene,
+            timestamp: new Date().toISOString(),
+            isOwn: false
+          };
+          
+          console.log('MultiplayerChat - Message continu envoyé:', simulatedMessage.content);
+          setMessages(prev => [...prev, simulatedMessage]);
+        }
+      }, 15000 + Math.random() * 20000); // Entre 15 et 35 secondes
+    };
+
+    // Démarrer la simulation continue après 35 secondes
+    const continuousTimeout = setTimeout(startContinuousSimulation, 35000);
+    simulationTimeouts.current.push(continuousTimeout);
   };
 
   // Envoyer un message

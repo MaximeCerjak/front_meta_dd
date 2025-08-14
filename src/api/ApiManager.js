@@ -159,6 +159,47 @@ class ApiManager {
             throw error;
         }
     }
+
+    // === MÉTHODES POUR LE CHAT MULTIJOUEUR ===
+
+    // Générer un message spontané de joueur virtuel
+    async generateSpontaneousMessage() {
+        try {
+            const response = await this.apiClient.post('/multiplayer/spontaneous');
+            console.log('Message spontané généré via Gateway:', response.data);
+            return response.data;
+        } catch (error) {
+            console.error('Erreur génération message spontané via Gateway:', error);
+            throw error;
+        }
+    }
+
+    // Générer une réponse à un message utilisateur
+    async generateResponseToUserMessage(userMessage, conversationContext = []) {
+        try {
+            const response = await this.apiClient.post('/multiplayer/response', {
+                userMessage,
+                conversationContext: conversationContext.slice(-3) // Garder seulement les 3 derniers messages
+            });
+            console.log('Réponse au message utilisateur générée via Gateway:', response.data);
+            return response.data;
+        } catch (error) {
+            console.error('Erreur génération réponse au message via Gateway:', error);
+            throw error;
+        }
+    }
+
+    // Récupérer la liste des joueurs virtuels
+    async getVirtualPlayers() {
+        try {
+            const response = await this.apiClient.get('/multiplayer/players');
+            console.log('Joueurs virtuels récupérés via Gateway:', response.data);
+            return response.data;
+        } catch (error) {
+            console.error('Erreur récupération joueurs virtuels via Gateway:', error);
+            throw error;
+        }
+    }
 }
 
 export default new ApiManager('http://localhost:8080/api');
