@@ -1,0 +1,163 @@
+services:
+  frontend-prod:
+    build:
+      context: ../dd_front
+      dockerfile: Dockerfile.prod
+      args:
+        NODE_ENV: production
+        GATEWAY_URL: https://api.digitaldrifter.local
+    container_name: digitaldrifter_frontend_prod
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=production
+      - GATEWAY_URL=http://gateway-service:8080
+    depends_on:
+      - gateway-service
+    networks:
+      - default
+    restart: unless-stopped
+    # Configuration pour la production
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`digitaldrifter.local`)"
+      - "traefik.http.services.frontend.loadbalancer.server.port=3002"
+      - "com.digitaldrifter.env=production"
+
+  # Services backend optimisés pour la production
+  gateway-service:
+    build:
+      context: ../gateway-service
+      dockerfile: Dockerfile.prod
+    ports:
+      - "8080:8080"
+    depends_on:
+      - user-service
+      - asset-service
+      - map-service
+      - chatbot-service
+    environment:
+      USER_SERVICE_URL: http://user-service:3000/api
+      ASSET_SERVICE_URL: http://asset-service:4000/api
+      MAP_SERVICE_URL: http://map-service:5000/api
+      CHATBOT_SERVICE_URL: http://chatbot-service:6000/api
+      JWT_SECRET: ${JWT_SECRET}
+      NODE_ENV: production
+    command: >
+      sh -c "/usr/local/bin/wait-for-it.sh user-service:3000 --timeout=60 --strict -- npm start"
+    networks:
+      - default
+    restart: unless-stopped
+
+  user-service:
+    build:
+      context: ../user-service
+      dockerfile: Dockerfile.prod
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      NODE_ENV: production
+    command: >
+      sh -c "/usr/local/bin/wait-for-it.sh postgres:5432 --timeout=60 --strict -- npm start"
+    networks:
+      - default
+    restart: unless-stopped
+
+  asset-service:
+    build:
+      context: ../asset-service
+      dockerfile: Dockerfile.prod
+    ports:
+      - "4000:4000"
+    volumes:
+      - asset_uploads_prod:/usr/src/app/src/uploads
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      NODE_ENV: production
+    command: >
+      sh -c "/usr/local/bin/wait-for-it.sh postgres:5432 --timeout=60 --strict -- npm start"
+    networks:
+      - default
+    restart: unless-stopped
+
+  map-service:
+    build:
+      context: ../map-service
+      dockerfile: Dockerfile.prod
+    ports:
+      - "5000:5000"
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      NODE_ENV: production
+    command: >
+      sh -c "/usr/local/bin/wait-for-it.sh postgres:5432 --timeout=60 --strict -- npm start"
+    networks:
+      - default
+    restart: unless-stopped
+
+  chatbot-service:
+    build:
+      context: ../chatbot-service
+      dockerfile: Dockerfile.prod
+    ports:
+      - "6000:6000"
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      NODE_ENV: production
+    command: >
+      sh -c "/usr/local/bin/wait-for-it.sh postgres:5432 --timeout=60 --strict -- npm start"
+    networks:
+      - default
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:14
+    container_name: digitaldrifter_postgres_prod
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+      - ../digitaldrifter-db/sql-scripts:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - default
+
+volumes:
+  asset_uploads_prod:
+  postgres_data_prod:
+
+networks:
+  default:
+    driver: bridge

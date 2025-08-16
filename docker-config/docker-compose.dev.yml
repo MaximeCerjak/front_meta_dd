@@ -1,0 +1,164 @@
+services:
+  frontend-dev:
+    build:
+      context: ../dd_front
+      dockerfile: config/docker/Dockerfile.dev
+    container_name: digitaldrifter_frontend_dev
+    ports:
+      - "3002:3002" 
+      - "3003:3003"
+    volumes:
+      - ../dd_front:/app
+      - frontend_node_modules:/app/node_modules
+      - ../dd_front/logs:/app/logs
+    environment:
+      - NODE_ENV=development
+      - GATEWAY_URL=http://gateway-service:8080
+      - VITE_GATEWAY_URL=http://localhost:8080
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    depends_on:
+      - gateway-service
+    networks:
+      - default
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=false"
+      - "com.digitaldrifter.env=development"
+
+  gateway-service:
+    build:
+      context: ../gateway-service
+      dockerfile: config/docker/Dockerfile.dev
+    ports:
+      - "8080:8080"
+    depends_on:
+      - user-service
+      - asset-service
+      - map-service
+      - chatbot-service
+    environment:
+      USER_SERVICE_URL: http://user-service:3001/api
+      ASSET_SERVICE_URL: http://asset-service:4000/api
+      MAP_SERVICE_URL: http://map-service:5000/api
+      CHATBOT_SERVICE_URL: http://chatbot-service:6000/api
+      JWT_SECRET: ${JWT_SECRET}
+    command: >
+      sh -c "/usr/local/bin/wait-for-it.sh user-service:3000 --timeout=60 --strict -- npm start"
+    networks:
+      - default
+
+  user-service:
+    build:
+      context: ../user-service
+      dockerfile: config/docker/Dockerfile.dev
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+    command: >
+      sh -c "/usr/local/bin/wait-for-it.sh postgres:5432 --timeout=60 --strict -- npm start"
+    networks:
+      - default
+
+  asset-service:
+    build:
+      context: ../asset-service
+      dockerfile: config/docker/Dockerfile.dev
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./asset-service/src/uploads:/usr/src/app/src/uploads
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    command: >
+      sh -c "/usr/local/bin/wait-for-it.sh postgres:5432 --timeout=60 --strict -- npm start"
+    networks:
+      - default
+
+  map-service:
+    build:
+      context: ../map-service
+      dockerfile: config/docker/Dockerfile.dev
+    ports:
+      - "5000:5000"
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    command: >
+      sh -c "/usr/local/bin/wait-for-it.sh postgres:5432 --timeout=60 --strict -- npm start"
+    networks:
+      - default
+
+  chatbot-service:
+    build:
+      context: ../chatbot-service
+      dockerfile: config/docker/Dockerfile.dev
+    ports:
+      - "6000:6000"
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    command: >
+      sh -c "/usr/local/bin/wait-for-it.sh postgres:5432 --timeout=60 --strict -- npm start"
+    networks:
+      - default
+
+  postgres:
+    image: postgres:14
+    container_name: digitaldrifter_postgres_dev
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+      - ../digitaldrifter-db/sql-scripts:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - default
+
+  documentation:
+    build:
+      context: ../project-documentation/webdoc
+      dockerfile: Dockerfile
+    container_name: digitaldrifter_documentation_dev
+    ports:
+      - "3001:3001"
+    depends_on:
+      - gateway-service
+      - user-service
+      - asset-service
+      - map-service
+      - chatbot-service
+
+
+volumes:
+  frontend_node_modules:
+  postgres_data_dev:
+
+networks:
+  default:
+    driver: bridge

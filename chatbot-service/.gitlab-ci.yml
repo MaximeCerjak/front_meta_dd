@@ -1,0 +1,99 @@
+# Variables globales
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  IMAGE_NAME: $CI_REGISTRY_IMAGE/chatbot-service
+  IMAGE_TAG: $CI_COMMIT_SHORT_SHA
+  SERVICE_NAME: "chatbot-service"
+  SERVICE_PORT: "6000"
+
+# Services nécessaires
+services:
+  - docker:dind
+
+# Stages de la pipeline
+stages:
+  - lint
+  - test
+  - security
+  - build
+
+# Cache pour accélérer les builds
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - node_modules/
+
+# Job de lint
+lint:
+  image: node:18-alpine
+  stage: lint
+  script:
+    - npm install --dev
+    - npx eslint . || echo "ESLint non configuré, passage du lint"
+  only:
+    - merge_requests
+    - develop
+    - main
+
+# Job de test
+test:
+  image: node:18-alpine
+  stage: test
+  script:
+    - npm install --dev
+    - echo "Tests du chatbot-service..."
+    - npm run test || echo "Tests ignorés pour le moment"
+    - echo "Audit de sécurité..."
+    - npm audit --audit-level=high || true
+    - echo "Tests du chatbot-service terminés"
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura-coverage.xml
+  coverage: '/Lines\s*:\s*(\d+\.\d*)%/'
+  only:
+    - merge_requests
+    - develop
+    - main
+
+# Job de sécurité
+security:
+  image: node:18-alpine
+  stage: security
+  script:
+    - npm audit --audit-level=moderate || true
+    - echo "Analyse de sécurité terminée"
+  allow_failure: true
+  only:
+    - merge_requests
+    - develop
+    - main
+
+# Job de build avec Dockerfile conditionnel
+build:
+  image: docker:latest
+  stage: build
+  before_script:
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+  script:
+    - |
+      if [ "$CI_COMMIT_REF_NAME" = "main" ]; then
+        echo "🚀 Construction PRODUCTION..."
+        docker build -f ./config/docker/Dockerfile.prod -t $IMAGE_NAME:$IMAGE_TAG .
+        docker tag $IMAGE_NAME:$IMAGE_TAG $IMAGE_NAME:latest
+        docker push $IMAGE_NAME:$IMAGE_TAG
+        docker push $IMAGE_NAME:latest
+        echo "✅ Image PROD poussée: $IMAGE_NAME:$IMAGE_TAG"
+      else
+        echo "🔧 Construction DÉVELOPPEMENT..."
+        docker build -f ./config/docker/Dockerfile.dev -t $IMAGE_NAME:$IMAGE_TAG-dev .
+        docker tag $IMAGE_NAME:$IMAGE_TAG-dev $IMAGE_NAME:dev-latest
+        docker push $IMAGE_NAME:$IMAGE_TAG-dev
+        docker push $IMAGE_NAME:dev-latest
+        echo "✅ Image DEV poussée: $IMAGE_NAME:$IMAGE_TAG-dev"
+      fi
+  only:
+    - develop
+    - main

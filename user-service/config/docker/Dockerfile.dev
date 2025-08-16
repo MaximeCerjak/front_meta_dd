@@ -1,0 +1,26 @@
+# Étape 1 : Utiliser une image Node.js officielle comme base
+FROM node:18
+
+# Copier le script wait-for-it.sh depuis le dossier docker-config
+COPY ./scripts/wait-for-it.sh /usr/local/bin/
+
+# Convertir les fins de ligne en LF et rendre le script exécutable
+RUN sed -i 's/\r$//' /usr/local/bin/wait-for-it.sh && chmod +x /usr/local/bin/wait-for-it.sh
+
+# Étape 2 : Définir le répertoire de travail à l'intérieur du conteneur
+WORKDIR /usr/src/app
+
+# Étape 3 : Copier les fichiers package.json et package-lock.json
+COPY package.json ./
+
+# Étape 4 : Installer les dépendances
+RUN npm install
+
+# Étape 5 : Copier le reste des fichiers de l'application
+COPY . .
+
+# Étape 6 : Exposer le port utilisé par le service
+EXPOSE 3000
+
+# Étape 7 : Commande par défaut pour démarrer le service
+CMD ["npm", "start"]

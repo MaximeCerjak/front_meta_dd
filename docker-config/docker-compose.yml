@@ -1,0 +1,143 @@
+services:
+  frontend:
+    build:
+      context: ../dd_front
+      dockerfile: Dockerfile
+    container_name: digitaldrifter_frontend
+    ports:
+      - "3002:3000" 
+    volumes:
+      - ../dd_front:/app 
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    command: sh -c "npm run dev"
+
+  postgres:
+    image: postgres:14
+    container_name: digitaldrifter_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../digitaldrifter-db/sql-scripts:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+  
+  docusaurus:
+    build:
+      context: ../project-documentation/webdoc
+    ports:
+      - "3001:3100"
+    container_name: digitaldrifter_docusaurus
+    depends_on:
+      - gateway-service
+      - user-service
+      - asset-service
+      - map-service
+    volumes:
+      - ./docusaurus:/app
+    command: >
+      sh -c "npm start -- --port 3100 --host 0.0.0.0"
+    networks:
+      - default
+  
+  gateway-service:
+    build:
+      context: ../gateway-service
+    ports:
+      - "8080:8080"
+    depends_on:
+      - user-service
+      - asset-service
+      - map-service
+      - chatbot-service
+    environment:
+      USER_SERVICE_URL: http://user-service:3000/api
+      ASSET_SERVICE_URL: http://asset-service:4000/api
+      MAP_SERVICE_URL: http://map-service:5000/api
+      CHATBOT_SERVICE_URL: http://chatbot-service:6000/api
+      JWT_SECRET: ${JWT_SECRET}
+    command: >
+      sh -c "/usr/local/bin/wait-for-it.sh user-service:3000 --timeout=60 --strict -- npm start"
+    networks:
+      - default
+
+  user-service:
+    build:
+      context: ../user-service
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+    command: >
+      sh -c "/usr/local/bin/wait-for-it.sh postgres:5432 --timeout=60 --strict -- npm start"
+    networks:
+      - default
+
+  asset-service:
+    build:
+      context: ../asset-service
+    ports:
+      - "4000:4000"
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    command: >
+      sh -c "/usr/local/bin/wait-for-it.sh postgres:5432 --timeout=60 --strict -- npm start"
+    networks:
+      - default
+
+  map-service:
+    build:
+      context: ../map-service
+    ports:
+      - "5000:5000"
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    command: >
+      sh -c "/usr/local/bin/wait-for-it.sh postgres:5432 --timeout=60 --strict -- npm start"
+    networks:
+      - default
+
+  chatbot-service:
+    build:
+      context: ../chatbot-service
+    ports:
+      - "6000:6000"
+    depends_on:
+      - postgres
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    command: >
+      sh -c "/usr/local/bin/wait-for-it.sh postgres:5432 --timeout=60 --strict -- npm start"
+    networks:
+      - default
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    driver: bridge

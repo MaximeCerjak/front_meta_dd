@@ -1,0 +1,21 @@
+FROM node:18
+
+# Copier le script
+COPY ./scripts/wait-for-it.sh /usr/local/bin/
+
+# Convertir les fins de ligne en LF et rendre le script exécutable
+RUN sed -i 's/\r$//' /usr/local/bin/wait-for-it.sh && chmod +x /usr/local/bin/wait-for-it.sh
+
+WORKDIR /usr/src/app
+
+# Copier les fichiers package.json et installer les dépendances
+COPY package*.json ./
+RUN npm install
+
+# Copier le reste des fichiers
+COPY . .
+
+EXPOSE 6000
+
+# Commande pour démarrer l'application
+CMD ["node", "src/app.js"]

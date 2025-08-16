@@ -1,0 +1,20 @@
+FROM node:18
+
+WORKDIR /usr/src/app
+
+# Copier package.json et installer les dépendances
+COPY package*.json ./
+RUN npm ci
+
+# Copier le code source
+COPY . .
+
+# Variables d'environnement pour les tests
+ENV NODE_ENV=test
+ENV DB_HOST=postgres-test
+ENV DB_PORT=5432
+ENV DB_NAME=user_service_test
+ENV DB_USER=postgres
+ENV DB_PASS=postgres
+
+CMD ["npm", "test"]

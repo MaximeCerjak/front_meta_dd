@@ -1,0 +1,33 @@
+# Étape 1: Build
+FROM node:18-alpine AS builder
+
+WORKDIR /usr/src/app
+
+# Copie des fichiers de dépendances
+COPY package*.json ./
+
+# Installation des dépendances
+RUN npm ci --only=production && npm cache clean --force
+
+# Étape 2: Runtime
+FROM node:18-alpine
+
+WORKDIR /usr/src/app
+
+# Création d'un utilisateur non-root
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+
+# Copie des dépendances depuis l'étape builder
+COPY --from=builder --chown=nodejs:nodejs /usr/src/app/node_modules ./node_modules
+
+# Copie du code source
+COPY --chown=nodejs:nodejs . .
+
+# Changement vers l'utilisateur non-root
+USER nodejs
+
+# Exposition du port
+EXPOSE 3000
+
+# Commande de démarrage
+CMD ["npm", "start"]
