@@ -1,0 +1,55 @@
+FROM node:18-alpine AS builder
+
+# Installer les dépendances pour la compilation
+WORKDIR /app
+
+# Copier les fichiers de configuration
+COPY package*.json ./
+
+# Installer toutes les dépendances (dev incluses pour les tests)
+RUN npm ci --only=production --silent
+
+# Étape de production
+FROM node:18-alpine AS production
+
+# Créer un utilisateur non-root pour la sécurité
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S chatbot -u 1001
+
+# Installer des utilitaires système nécessaires
+RUN apk add --no-cache \
+    tini \
+    curl \
+    && rm -rf /var/cache/apk/*
+
+WORKDIR /usr/src/app
+
+# Copier les dépendances depuis l'étape builder
+COPY --from=builder /app/node_modules ./node_modules
+
+# Copier le code source
+COPY --chown=chatbot:nodejs . .
+
+# Créer les répertoires nécessaires
+RUN mkdir -p logs && chown chatbot:nodejs logs
+
+# Changer vers l'utilisateur non-root
+USER chatbot
+
+# Exposer le port
+EXPOSE 6000
+
+# Ajouter des labels pour la traçabilité
+LABEL maintainer="your-email@example.com"
+LABEL version="1.0.0"
+LABEL description="Chatbot Service pour le metavers artistique"
+
+# Healthcheck pour vérifier que le service fonctionne
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:6000/health || exit 1
+
+# Utiliser tini comme init system
+ENTRYPOINT ["/sbin/tini", "--"]
+
+# Commande par défaut
+CMD ["node", "src/app.js"]

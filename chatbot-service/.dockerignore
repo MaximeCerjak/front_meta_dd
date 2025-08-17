@@ -6,3 +6,12 @@ README.md
 .nyc_output
 coverage
 .coverage
+__tests__
+*.test.js
+.env.local
+.env.test
+.env.production
+logs/
+*.log
+.DS_Store
+Thumbs.db

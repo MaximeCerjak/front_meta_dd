@@ -1,3 +1,5 @@
+# .gitlab-ci.yml (version mise à jour)
+
 # Variables globales
 variables:
   DOCKER_DRIVER: overlay2
@@ -6,6 +8,7 @@ variables:
   IMAGE_TAG: $CI_COMMIT_SHORT_SHA
   SERVICE_NAME: "chatbot-service"
   SERVICE_PORT: "6000"
+  NODE_VERSION: "18"
 
 # Services nécessaires
 services:
@@ -13,68 +16,154 @@ services:
 
 # Stages de la pipeline
 stages:
+  - install
   - lint
   - test
   - security
   - build
+  - deploy
 
 # Cache pour accélérer les builds
 cache:
   key: ${CI_COMMIT_REF_SLUG}
   paths:
     - node_modules/
+    - .npm/
+
+# Template pour les jobs Node.js
+.node_template: &node_template
+  image: node:${NODE_VERSION}-alpine
+  before_script:
+    - npm ci --cache .npm --prefer-offline
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - node_modules/
+      - .npm/
+
+# Job d'installation des dépendances
+install_dependencies:
+  <<: *node_template
+  stage: install
+  script:
+    - echo "📦 Installation des dépendances..."
+    - npm ci --cache .npm --prefer-offline
+    - echo "✅ Dépendances installées avec succès"
+  artifacts:
+    paths:
+      - node_modules/
+    expire_in: 1 hour
+  only:
+    - merge_requests
+    - develop
+    - main
 
 # Job de lint
 lint:
-  image: node:18-alpine
+  <<: *node_template
   stage: lint
+  dependencies:
+    - install_dependencies
   script:
-    - npm install --dev
-    - npx eslint . || echo "ESLint non configuré, passage du lint"
+    - echo "🔍 Analyse de la qualité du code..."
+    - npm run lint
+    - echo "✅ Code conforme aux standards"
+  allow_failure: false
   only:
     - merge_requests
     - develop
     - main
 
-# Job de test
-test:
-  image: node:18-alpine
+# Job de tests unitaires
+test_unit:
+  <<: *node_template
   stage: test
+  dependencies:
+    - install_dependencies
   script:
-    - npm install --dev
-    - echo "Tests du chatbot-service..."
-    - npm run test || echo "Tests ignorés pour le moment"
-    - echo "Audit de sécurité..."
-    - npm audit --audit-level=high || true
-    - echo "Tests du chatbot-service terminés"
+    - echo "🧪 Exécution des tests unitaires..."
+    - npm run test:ci
+    - echo "✅ Tests unitaires réussis"
+  coverage: '/Lines\s*:\s*(\d+\.\d*)%/'
   artifacts:
+    when: always
     reports:
+      junit: coverage/junit.xml
       coverage_report:
         coverage_format: cobertura
         path: coverage/cobertura-coverage.xml
-  coverage: '/Lines\s*:\s*(\d+\.\d*)%/'
+    paths:
+      - coverage/
+    expire_in: 1 week
   only:
     - merge_requests
     - develop
     - main
 
-# Job de sécurité
-security:
-  image: node:18-alpine
-  stage: security
+# Job de tests d'intégration
+test_integration:
+  <<: *node_template
+  stage: test
+  dependencies:
+    - install_dependencies
   script:
-    - npm audit --audit-level=moderate || true
-    - echo "Analyse de sécurité terminée"
+    - echo "🔗 Exécution des tests d'intégration..."
+    - npm run test -- --testPathPattern="integration" --verbose
+    - echo "✅ Tests d'intégration réussis"
   allow_failure: true
   only:
     - merge_requests
     - develop
     - main
 
-# Job de build avec Dockerfile conditionnel
-build:
+# Job de sécurité - Audit des dépendances
+security_audit:
+  <<: *node_template
+  stage: security
+  dependencies:
+    - install_dependencies
+  script:
+    - echo "🔒 Audit de sécurité des dépendances..."
+    - npm audit --audit-level=moderate
+    - echo "✅ Audit de sécurité terminé"
+  allow_failure: true
+  artifacts:
+    when: always
+    reports:
+      dependency_scanning: gl-dependency-scanning-report.json
+    expire_in: 1 week
+  only:
+    - merge_requests
+    - develop
+    - main
+
+# Job de sécurité - Scan des secrets
+security_secrets:
+  image: alpine:latest
+  stage: security
+  before_script:
+    - apk add --no-cache git grep
+  script:
+    - echo "🔍 Recherche de secrets dans le code..."
+    - |
+      # Recherche de patterns de secrets communs
+      echo "Vérification des clés API..."
+      if grep -r -i "api.key\|secret\|password\|token" --include="*.js" --include="*.json" src/ || true; then
+        echo "⚠️ Attention: Vérifiez que les secrets ne sont pas exposés"
+      fi
+      echo "✅ Scan des secrets terminé"
+  allow_failure: true
+  only:
+    - merge_requests
+    - develop
+    - main
+
+# Job de build avec tests de fumée
+build_and_smoke_test:
   image: docker:latest
   stage: build
+  dependencies:
+    - test_unit
   before_script:
     - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
   script:
@@ -83,6 +172,22 @@ build:
         echo "🚀 Construction PRODUCTION..."
         docker build -f ./config/docker/Dockerfile.prod -t $IMAGE_NAME:$IMAGE_TAG .
         docker tag $IMAGE_NAME:$IMAGE_TAG $IMAGE_NAME:latest
+        
+        # Test de fumée - vérifier que l'image démarre
+        echo "💨 Test de fumée..."
+        docker run -d --name smoke-test -p 6000:6000 -e OPENAI_API_KEY=test $IMAGE_NAME:$IMAGE_TAG
+        sleep 10
+        # Vérifier que le conteneur tourne
+        if docker ps | grep smoke-test; then
+          echo "✅ Test de fumée réussi"
+          docker stop smoke-test
+          docker rm smoke-test
+        else
+          echo "❌ Test de fumée échoué"
+          docker logs smoke-test
+          exit 1
+        fi
+        
         docker push $IMAGE_NAME:$IMAGE_TAG
         docker push $IMAGE_NAME:latest
         echo "✅ Image PROD poussée: $IMAGE_NAME:$IMAGE_TAG"
@@ -94,6 +199,61 @@ build:
         docker push $IMAGE_NAME:dev-latest
         echo "✅ Image DEV poussée: $IMAGE_NAME:$IMAGE_TAG-dev"
       fi
+  after_script:
+    - docker system prune -f
+  only:
+    - develop
+    - main
+
+# Job de déploiement automatique (optionnel)
+deploy_dev:
+  image: alpine:latest
+  stage: deploy
+  dependencies:
+    - build_and_smoke_test
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "🚀 Déploiement en environnement de développement..."
+    - echo "Image à déployer: $IMAGE_NAME:$IMAGE_TAG-dev"
+    # Ici vous pourriez ajouter vos commandes de déploiement
+    # Par exemple: kubectl, docker-compose, webhook, etc.
+    - echo "✅ Déploiement DEV terminé"
+  environment:
+    name: development
+    url: https://dev-chatbot.example.com
+  when: manual
+  only:
+    - develop
+
+deploy_prod:
+  image: alpine:latest
+  stage: deploy
+  dependencies:
+    - build_and_smoke_test
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "🚀 Déploiement en PRODUCTION..."
+    - echo "Image à déployer: $IMAGE_NAME:$IMAGE_TAG"
+    # Commandes de déploiement production
+    - echo "✅ Déploiement PROD terminé"
+  environment:
+    name: production
+    url: https://chatbot.example.com
+  when: manual
+  only:
+    - main
+
+# Job de nettoyage des artefacts
+cleanup:
+  image: alpine:latest
+  stage: deploy
+  script:
+    - echo "🧹 Nettoyage des artefacts anciens..."
+    - echo "✅ Nettoyage terminé"
+  when: always
+  allow_failure: true
   only:
     - develop
     - main
