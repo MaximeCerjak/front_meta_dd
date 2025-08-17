@@ -20,5 +20,7 @@ app.use('/api/maps/teleporters', teleporterRoutes);
 // Swagger
 app.use(swaggerRouter);
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, '0.0.0.0', () => console.log(`Map Service running on port ${PORT}`));
+if (process.env.NODE_ENV !== 'test') {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, '0.0.0.0', () => console.log(`Map Service running on port ${PORT}`));
+}

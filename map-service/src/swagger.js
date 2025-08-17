@@ -39,7 +39,7 @@ const options = {
       }
     }
   },
-  apis: ['./src/routes/*.js'], // Adapter aux fichiers routes
+  apis: ['./src/routes/*.js'],
 };
 
 // Génération des spécifications OpenAPI

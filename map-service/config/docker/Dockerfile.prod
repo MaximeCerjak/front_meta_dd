@@ -1,0 +1,51 @@
+# config/docker/Dockerfile.prod
+# Étape 1 : Build stage
+FROM node:18-alpine AS builder
+
+WORKDIR /usr/src/app
+
+# Copier les fichiers de configuration des dépendances
+COPY package*.json ./
+
+# Installer toutes les dépendances (dev + prod) pour le build
+RUN npm ci --only=production && npm cache clean --force
+
+# Étape 2 : Production stage
+FROM node:18-alpine AS production
+
+# Créer un utilisateur non-root pour la sécurité
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+WORKDIR /usr/src/app
+
+# Copier les dépendances depuis le stage builder
+COPY --from=builder /usr/src/app/node_modules ./node_modules
+
+# Copier le code source
+COPY --chown=nodejs:nodejs . .
+
+# Exposer le port
+EXPOSE 5000
+
+# Définir l'utilisateur
+USER nodejs
+
+# Variables d'environnement de production
+ENV NODE_ENV=production
+ENV PORT=5000
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "const http = require('http'); \
+    const options = { hostname: 'localhost', port: 5000, path: '/api/maps', timeout: 2000 }; \
+    const req = http.request(options, (res) => { \
+      if (res.statusCode === 200 || res.statusCode === 404) { process.exit(0); } \
+      else { process.exit(1); } \
+    }); \
+    req.on('timeout', () => { req.destroy(); process.exit(1); }); \
+    req.on('error', () => { process.exit(1); }); \
+    req.end();"
+
+# Commande de démarrage
+CMD ["npm", "start"]

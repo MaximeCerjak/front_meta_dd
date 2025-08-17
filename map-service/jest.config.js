@@ -1,26 +1,19 @@
-module.exports = {
+
+export default {
   testEnvironment: 'node',
-  
-  // Ajoutez le setup
   setupFilesAfterEnv: ['<rootDir>/__tests__/setup.js'],
-  
+  testMatch: ['**/__tests__/**/*.test.js'],
+  testTimeout: 15000,
+  verbose: true,
   collectCoverageFrom: [
     'src/**/*.js',
     '!src/**/*.test.js',
-    '!src/swagger.js'
+    '!src/app.js'
   ],
-  
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
-  
-  testMatch: [
-    '**/__tests__/**/*.test.js'
-  ],
-  
-  transform: {
-    '^.+\\.js$': 'babel-jest'
-  },
-  
-  verbose: true,
-  clearMocks: true
+  // Améliorer la gestion des mocks pour ES modules
+  clearMocks: true,
+  resetMocks: true,
+  restoreMocks: true
 };

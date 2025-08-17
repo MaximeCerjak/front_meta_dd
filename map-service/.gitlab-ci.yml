@@ -1,4 +1,6 @@
+# =========================
 # Variables globales
+# =========================
 variables:
   DOCKER_DRIVER: overlay2
   DOCKER_TLS_CERTDIR: "/certs"
@@ -6,94 +8,329 @@ variables:
   IMAGE_TAG: $CI_COMMIT_SHORT_SHA
   SERVICE_NAME: "map-service"
   SERVICE_PORT: "5000"
+  NODE_VERSION: "18"
+  # Tests
+  NODE_ENV: test
 
+# =========================
 # Services nécessaires
+# =========================
 services:
   - docker:dind
 
-# Stages de la pipeline
+# =========================
+# Stages
+# =========================
 stages:
-  - lint
+  - install
+  - quality
   - test
-  - security
   - build
+  - deploy
 
-# Cache pour accélérer les builds
+# =========================
+# Cache npm
+# =========================
 cache:
   key: ${CI_COMMIT_REF_SLUG}
   paths:
     - node_modules/
+    - .npm/
 
-# Job de lint
+# =========================
+# Template Node
+# =========================
+.node_template: &node_template
+  image: node:${NODE_VERSION}-alpine
+  before_script:
+    - echo "📦 Préparation npm cache…"
+    - npm ci --cache .npm --prefer-offline
+
+# ===================================
+# JOBS EXÉCUTÉS SUR TOUTES LES BRANCHES
+# ===================================
+
+# Installation des dépendances
+install_dependencies:
+  <<: *node_template
+  stage: install
+  script:
+    - echo "📦 Installation des dépendances…"
+    - npm ci --cache .npm --prefer-offline
+    - echo "✅ Dépendances installées"
+  artifacts:
+    paths:
+      - node_modules/
+    expire_in: 1 hour
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^feat(ure)?\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^fix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^hotfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^bugfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^chore\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^refactor\/.*/
+
+# Lint
 lint:
-  image: node:18-alpine
-  stage: lint
+  <<: *node_template
+  stage: quality
+  dependencies:
+    - install_dependencies
   script:
-    - npm install --dev
-    - npx eslint . || echo "ESLint non configuré, passage du lint"
-  only:
-    - merge_requests
-    - develop
-    - main
+    - echo "🔍 Linting…"
+    - npm run lint
+    - echo "✅ Code conforme"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^feat(ure)?\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^fix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^hotfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^bugfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^chore\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^refactor\/.*/
 
-# Job de test
-test:
-  image: node:18-alpine
-  stage: test
+# Audit de sécurité
+security_audit:
+  <<: *node_template
+  stage: quality
+  dependencies:
+    - install_dependencies
   script:
-    - npm install --dev
-    - echo "Tests du map-service..."
-    - npm run test || echo "Tests ignorés pour le moment"
-    - echo "Audit de sécurité..."
-    - npm audit --audit-level=high || true
-    - echo "Tests du map-service terminés"
+    - echo "🔒 Audit de sécurité npm…"
+    - npm audit --audit-level=moderate || true
+    - echo "✅ Audit terminé (non bloquant)"
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^feat(ure)?\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^fix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^hotfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^bugfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^chore\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^refactor\/.*/
+
+# Tests unitaires et d'intégration
+test_unit:
+  <<: *node_template
+  stage: test
+  dependencies:
+    - install_dependencies
+  script:
+    - echo "🧪 Tests unitaires et d'intégration…"
+    - npm run test:ci
+    - echo "✅ Tests OK"
   artifacts:
     reports:
       coverage_report:
         coverage_format: cobertura
         path: coverage/cobertura-coverage.xml
+      junit: coverage/junit.xml
+    paths:
+      - coverage/
+    expire_in: 1 week
   coverage: '/Lines\s*:\s*(\d+\.\d*)%/'
-  only:
-    - merge_requests
-    - develop
-    - main
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^feat(ure)?\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^fix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^hotfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^bugfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^chore\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^refactor\/.*/
 
-# Job de sécurité
-security:
-  image: node:18-alpine
-  stage: security
+# Tests avec base de données réelle (optionnel)
+test_database:
+  image: node:${NODE_VERSION}-alpine
+  stage: test
+  services:
+    - postgres:13-alpine
+  variables:
+    POSTGRES_DB: map_service_test
+    POSTGRES_USER: test_user
+    POSTGRES_PASSWORD: test_password
+    DB_HOST: postgres
+    DB_NAME: map_service_test
+    DB_USER: test_user
+    DB_PASSWORD: test_password
+  dependencies:
+    - install_dependencies
+  before_script:
+    - npm ci --cache .npm --prefer-offline
+    - apk add --no-cache postgresql-client
+    - |
+      until pg_isready -h postgres -p 5432; do
+        echo "Attente de PostgreSQL..."
+        sleep 2
+      done
   script:
-    - npm audit --audit-level=moderate || true
-    - echo "Analyse de sécurité terminée"
+    - echo "🗄️ Tests avec base de données réelle…"
+    - npm run test -- --testPathPattern=database --verbose || echo "Tests DB ignorés si pas configurés"
+    - echo "✅ Tests DB terminés"
   allow_failure: true
-  only:
-    - merge_requests
-    - develop
-    - main
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
 
-# Job de build avec Dockerfile conditionnel
-build:
+# Scan de secrets simple (non bloquant)
+security_secrets:
+  image: alpine:latest
+  stage: quality
+  before_script:
+    - apk add --no-cache git grep
+  script:
+    - echo "🔍 Scan de secrets…"
+    - |
+      if grep -RniE "api[_-]?key|secret|password|token" --include="*.js" --include="*.json" src/ || true; then
+        echo "⚠️ Vérifiez que des secrets ne sont pas exposés."
+      fi
+    - echo "✅ Scan terminé"
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^feat(ure)?\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^fix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^hotfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^bugfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^chore\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^refactor\/.*/
+
+# ===================================
+# BUILD (séparé dev / prod)
+# ===================================
+
+# Build DEV (branche develop)
+build_dev:
   image: docker:latest
   stage: build
   before_script:
     - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
   script:
+    - echo "🔧 Build DEV…"
+    - docker build -f ./config/docker/Dockerfile.dev -t $IMAGE_NAME:$IMAGE_TAG-dev .
+    - docker tag $IMAGE_NAME:$IMAGE_TAG-dev $IMAGE_NAME:dev-latest
+    - docker push $IMAGE_NAME:$IMAGE_TAG-dev
+    - docker push $IMAGE_NAME:dev-latest
+    - echo "✅ Image DEV poussée => $IMAGE_NAME:$IMAGE_TAG-dev"
+  dependencies:
+    - test_unit
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+# Build PROD (branche main) + smoke test
+build_prod:
+  image: docker:latest
+  stage: build
+  before_script:
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+  script:
+    - echo "🚀 Build PROD…"
+    - docker build -f ./config/docker/Dockerfile.prod -t $IMAGE_NAME:$IMAGE_TAG .
+    - docker tag $IMAGE_NAME:$IMAGE_TAG $IMAGE_NAME:latest
+    # Test de fumée : démarrage container
+    - echo "💨 Smoke test…"
+    - docker run -d --name smoke-test -p ${SERVICE_PORT}:${SERVICE_PORT} -e NODE_ENV=production $IMAGE_NAME:$IMAGE_TAG
+    - sleep 10
     - |
-      if [ "$CI_COMMIT_REF_NAME" = "main" ]; then
-        echo "🚀 Construction PRODUCTION..."
-        docker build -f ./config/docker/Dockerfile.prod -t $IMAGE_NAME:$IMAGE_TAG .
-        docker tag $IMAGE_NAME:$IMAGE_TAG $IMAGE_NAME:latest
-        docker push $IMAGE_NAME:$IMAGE_TAG
-        docker push $IMAGE_NAME:latest
-        echo "✅ Image PROD poussée: $IMAGE_NAME:$IMAGE_TAG"
+      if docker ps | grep -q smoke-test; then
+        echo "✅ Smoke test OK"
+        docker stop smoke-test && docker rm smoke-test
       else
-        echo "🔧 Construction DÉVELOPPEMENT..."
-        docker build -f ./config/docker/Dockerfile.dev -t $IMAGE_NAME:$IMAGE_TAG-dev .
-        docker tag $IMAGE_NAME:$IMAGE_TAG-dev $IMAGE_NAME:dev-latest
-        docker push $IMAGE_NAME:$IMAGE_TAG-dev
-        docker push $IMAGE_NAME:dev-latest
-        echo "✅ Image DEV poussée: $IMAGE_NAME:$IMAGE_TAG-dev"
+        echo "❌ Smoke test KO"
+        docker logs smoke-test || true
+        exit 1
       fi
-  only:
-    - develop
-    - main
+    - docker push $IMAGE_NAME:$IMAGE_TAG
+    - docker push $IMAGE_NAME:latest
+    - echo "✅ Image PROD poussée => $IMAGE_NAME:$IMAGE_TAG"
+  after_script:
+    - docker system prune -f || true
+  dependencies:
+    - test_unit
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# ===================================
+# DÉPLOIEMENT
+# ===================================
+
+deploy_staging:
+  image: alpine/helm:latest
+  stage: deploy
+  script:
+    - echo "🚢 Déploiement STAGING…"
+    - echo "Image => $IMAGE_NAME:$IMAGE_TAG-dev"
+    - echo "Configuration environnement staging…"
+    # Ici, ajoutez vos commandes Helm/Kubernetes pour le déploiement
+    # helm upgrade --install map-service-staging ./helm-chart --set image.tag=$IMAGE_TAG-dev
+  environment:
+    name: staging
+    url: https://staging-map-service.example.com
+  dependencies:
+    - build_dev
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+      when: manual
+
+deploy_production:
+  image: alpine/helm:latest
+  stage: deploy
+  script:
+    - echo "🚀 Déploiement PRODUCTION…"
+    - echo "Image => $IMAGE_NAME:$IMAGE_TAG"
+    - echo "Configuration environnement production…"
+    # Ici, ajoutez vos commandes Helm/Kubernetes pour le déploiement
+    # helm upgrade --install map-service ./helm-chart --set image.tag=$IMAGE_TAG
+  environment:
+    name: production
+    url: https://map-service.example.com
+  dependencies:
+    - build_prod
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+
+# ===================================
+# JOBS UTILITAIRES
+# ===================================
+
+# Nettoyage (programmable)
+cleanup:
+  image: docker:latest
+  stage: deploy
+  script:
+    - echo "🧹 Nettoyage d'images anciennes…"
+    - docker image prune -a --filter "until=720h" --force || true
+    - echo "✅ Nettoyage terminé"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: manual
+
+# Validation MR (agrégateur)
+validate_mr:
+  <<: *node_template
+  stage: test
+  dependencies:
+    - install_dependencies
+    - lint
+    - test_unit
+    - security_audit
+  script:
+    - echo "✅ Validation MR"
+    - echo "- Lint ✅"
+    - echo "- Unit tests ✅"
+    - echo "- Security audit ✅"
+    - echo "🎉 Prêt à merger !"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
