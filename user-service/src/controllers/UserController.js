@@ -104,9 +104,9 @@ export const getUserById = async (req, res) => {
 
 export const testToken = async (req, res) => {
   try {
-    console.log('User service : test token : ', req)
-    return res.json('TOKEN OK')
+    console.log('User service : test token : ', req);
+    return res.json('TOKEN OK');
   } catch (error) {
     return res.status(500).json({ message: 'Error with token\'s role', error });
   }
-}
+};

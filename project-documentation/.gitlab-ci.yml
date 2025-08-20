@@ -1,0 +1,12 @@
+image: node:latest
+
+pages:
+  stage: deploy
+  script:
+    - cd webdoc
+    - npm install
+    - npm run build
+    - mv build ../public
+  artifacts:
+    paths:
+      - public

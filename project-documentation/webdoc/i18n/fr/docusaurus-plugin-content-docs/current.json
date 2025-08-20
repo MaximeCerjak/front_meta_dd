@@ -1,0 +1,18 @@
+{
+  "version.label": {
+    "message": "Next",
+    "description": "The label for version current"
+  },
+  "sidebar.sidebar.category.Conventions": {
+    "message": "Conventions",
+    "description": "The label for category Conventions in sidebar sidebar"
+  },
+  "sidebar.sidebar.category.Sécurité": {
+    "message": "Sécurité",
+    "description": "The label for category Sécurité in sidebar sidebar"
+  },
+  "sidebar.sidebar.category.Architecture": {
+    "message": "Architecture",
+    "description": "The label for category Architecture in sidebar sidebar"
+  }
+}

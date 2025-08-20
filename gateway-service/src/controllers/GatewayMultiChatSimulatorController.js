@@ -68,21 +68,19 @@ export const generateResponseToUser = async (req, res) => {
             });
         }
 
+        console.log('🌐 Gateway: Requête reçue du frontend:', req.body);
+
         const response = await getResponseToUserMessage(userMessage, conversationContext);
         
-        res.status(200).send({
-            playerId: response.playerId,
-            playerName: response.playerName,
-            playerAvatar: response.playerAvatar,
-            message: response.message,
-            type: response.type,
-            respondingTo: response.respondingTo,
-            timestamp: response.timestamp
-        });
-    } catch (error) {
-        console.error('Error generating response to user:', error.message);
+        console.log('📥 Gateway: Données reçues du service:', response);
+        console.log('📊 Gateway: Type des données:', typeof response);
+        console.log('📋 Gateway: Clés des données:', Object.keys(response));
         
-        // Fallback avec réponse prédéfinie
+        res.status(200).send(response);
+        
+    } catch (error) {
+        console.error('❌ Gateway: Erreur:', error);
+        
         const fallbackPlayers = [
             { id: 'alice', name: 'Alice', avatar: '🎨' },
             { id: 'bob', name: 'Bob', avatar: '🖼️' },
@@ -104,15 +102,25 @@ export const generateResponseToUser = async (req, res) => {
         
         const randomPlayer = fallbackPlayers[Math.floor(Math.random() * fallbackPlayers.length)];
         const randomResponse = fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)];
-        
+
         res.status(200).send({
-            playerId: randomPlayer.id,
-            playerName: randomPlayer.name,
-            playerAvatar: randomPlayer.avatar,
-            message: randomResponse,
-            type: 'fallback',
-            respondingTo: req.body.userMessage,
-            timestamp: new Date().toISOString()
+            responses: [{
+                playerId: randomPlayer.id,
+                playerName: randomPlayer.name,
+                playerAvatar: randomPlayer.avatar,
+                message: randomResponse,
+                type: 'fallback',
+                respondingTo: req.body.userMessage,
+                timestamp: new Date().toISOString()
+            }],
+            analysis: {
+                isGreeting: false,
+                isQuestion: false,
+                isHelpRequest: false,
+                isSharing: false,
+                priority: 'low'
+            },
+            responseCount: 1
         });
     }
 };

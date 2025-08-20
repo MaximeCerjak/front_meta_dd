@@ -3,12 +3,10 @@ set -e
 
 echo "🏗️ Construction du projet..."
 
-# Variables
 IMAGE_NAME="chatbot-service"
 VERSION=${1:-"latest"}
 BUILD_TYPE=${2:-"dev"}
 
-# Couleurs
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m'
@@ -42,9 +40,6 @@ if [ "$BUILD_TYPE" = "prod" ]; then
     
     # Attendre que le service démarre
     sleep 5
-    
-    # Tester si le service répond (si vous avez un endpoint health)
-    # curl -f http://localhost:6001/health || (docker logs $CONTAINER_ID && exit 1)
     
     # Nettoyer
     docker stop $CONTAINER_ID

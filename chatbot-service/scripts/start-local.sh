@@ -2,7 +2,6 @@
 
 echo "🚀 Démarrage local du service chatbot..."
 
-# Vérifier si le fichier .env existe
 if [ ! -f ".env" ]; then
     echo "⚠️ Fichier .env manquant. Création d'un exemple..."
     cat > .env << EOF
@@ -20,12 +19,10 @@ EOF
     exit 1
 fi
 
-# Vérifier les dépendances
 if [ ! -d "node_modules" ]; then
     echo "📦 Installation des dépendances..."
     npm install
 fi
 
-# Démarrer en mode développement
 echo "🔧 Démarrage en mode développement avec nodemon..."
 npm run dev

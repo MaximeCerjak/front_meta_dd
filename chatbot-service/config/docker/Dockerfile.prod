@@ -40,7 +40,7 @@ USER chatbot
 EXPOSE 6000
 
 # Ajouter des labels pour la traçabilité
-LABEL maintainer="your-email@example.com"
+LABEL maintainer="maxime.cerjak@ynov.com"
 LABEL version="1.0.0"
 LABEL description="Chatbot Service pour le metavers artistique"
 

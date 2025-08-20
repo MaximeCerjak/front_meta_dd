@@ -1,9 +1,9 @@
-import express from "express";
-import dotenv from "dotenv";
-import cors from "cors";
-import chatbotRoutes from "./routes/chatbotRoutes.js";
-import multiChatSimulatorRoutes from "./routes/multiChatSimulatorRoutes.js";
-import healthRoutes from "./routes/healthRoutes.js";
+import express from 'express';
+import dotenv from 'dotenv';
+import cors from 'cors';
+import chatbotRoutes from './routes/chatbotRoutes.js';
+import multiChatSimulatorRoutes from './routes/multiChatSimulatorRoutes.js';
+import healthRoutes from './routes/healthRoutes.js';
 
 dotenv.config();
 
@@ -24,21 +24,21 @@ app.use((req, res, next) => {
 });
 
 // Routes
-app.use("/", healthRoutes);
-app.use("/api", chatbotRoutes);
-app.use("/api/multiplayer", multiChatSimulatorRoutes);
+app.use('/', healthRoutes);
+app.use('/api', chatbotRoutes);
+app.use('/api/multiplayer', multiChatSimulatorRoutes);
 
 // Route de base
-app.get("/", (req, res) => {
+app.get('/', (req, res) => {
     res.json({
-        message: "🎨 Chatbot Service - Metavers Artistique d'Avignon",
-        version: "1.0.0",
+        message: '🎨 Chatbot Service - Metavers Artistique d\'Avignon',
+        version: '1.0.0',
         endpoints: {
-            health: "/health",
-            chatbot: "/api/chatbot",
-            multiplayer: "/api/multiplayer/*"
+            health: '/health',
+            chatbot: '/api/chatbot',
+            multiplayer: '/api/multiplayer/*'
         },
-        documentation: "/api-docs"
+        documentation: '/api-docs'
     });
 });
 
@@ -52,6 +52,7 @@ app.use((err, req, res, next) => {
             : err.message,
         ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
     });
+    next();
 });
 
 // Gestion des routes non trouvées
@@ -63,14 +64,14 @@ app.use('*', (req, res) => {
     });
 });
 
-// Gestion gracieuse de l'arrêt
+// Gestion de l'arrêt
 process.on('SIGTERM', () => {
-    console.log('🛑 Signal SIGTERM reçu, arrêt gracieux...');
+    console.log('🛑 Signal SIGTERM reçu, arrêt...');
     process.exit(0);
 });
 
 process.on('SIGINT', () => {
-    console.log('🛑 Signal SIGINT reçu, arrêt gracieux...');
+    console.log('🛑 Signal SIGINT reçu, arrêt...');
     process.exit(0);
 });
 

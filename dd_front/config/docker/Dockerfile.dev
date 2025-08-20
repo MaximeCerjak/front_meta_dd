@@ -1,0 +1,42 @@
+# Dockerfile de développement pour Frontend React + Phaser.js
+FROM node:20-alpine
+
+# Métadonnées
+LABEL maintainer="DigitalDrifter Team"
+LABEL service="dd-front-dev"
+LABEL environment="development"
+
+# Installation des outils système pour le développement
+RUN apk add --no-cache \
+    git \
+    curl \
+    bash \
+    && rm -rf /var/cache/apk/*
+
+WORKDIR /app
+
+# Copie des fichiers de dépendances
+COPY package*.json ./
+
+# Installation des dépendances (incluant devDependencies)
+RUN npm install && npm cache clean --force
+
+# Variables d'environnement pour le développement
+ENV NODE_ENV=development
+ENV GATEWAY_URL=http://gateway-service:8080
+ENV VITE_GATEWAY_URL=http://localhost:8080
+ENV CHOKIDAR_USEPOLLING=true
+ENV WATCHPACK_POLLING=true
+
+# Copie du code source
+COPY . .
+
+# Exposition du port de développement et HMR
+EXPOSE 3002 3003
+
+# Health check pour le développement
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:3002 || exit 1
+
+# Script de démarrage pour le développement
+CMD ["npm", "run", "dev"]

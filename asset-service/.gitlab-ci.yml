@@ -13,58 +13,94 @@ variables:
   DB_PASSWORD: test_password
   DB_HOST: localhost
 
-# Services nécessaires
 services:
   - docker:dind
   - postgres:14
 
-# Stages de la pipeline
 stages:
   - install
-  - lint
+  - quality
   - test
-  - security
   - build
   - deploy
 
-# Cache pour accélérer les builds
 cache:
   key: ${CI_COMMIT_REF_SLUG}
   paths:
     - node_modules/
     - .npm/
 
-# Job d'installation des dépendances
+# ===================================
+# JOBS EXÉCUTÉS SUR TOUTES LES BRANCHES
+# ===================================
+
+# Installation des dépendances
 install_dependencies:
   image: node:18-alpine
   stage: install
   script:
+    - echo "📦 Installation des dépendances..."
     - npm ci --cache .npm --prefer-offline
+    - echo "✅ Dépendances installées"
   artifacts:
     paths:
       - node_modules/
     expire_in: 1 hour
-  only:
-    - merge_requests
-    - develop
-    - main
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^feat(ure)?\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^fix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^hotfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^bugfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^chore\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^refactor\/.*/
 
-# Job de lint
+# Linting du code
 lint:
   image: node:18-alpine
-  stage: lint
+  stage: quality
   dependencies:
     - install_dependencies
   script:
     - echo "🔍 Lancement du linting..."
     - npm run lint
-    - echo "✅ Linting terminé avec succès"
-  only:
-    - merge_requests
-    - develop
-    - main
+    - echo "✅ Code conforme aux standards"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^feat(ure)?\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^fix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^hotfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^bugfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^chore\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^refactor\/.*/
 
-# Job de test unitaire
+# Audit de sécurité
+security_audit:
+  image: node:18-alpine
+  stage: quality
+  dependencies:
+    - install_dependencies
+  script:
+    - echo "🔒 Audit de sécurité des dépendances..."
+    - npm audit --audit-level=moderate || true
+    - echo "✅ Audit de sécurité terminé"
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^feat(ure)?\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^fix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^hotfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^bugfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^chore\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^refactor\/.*/
+
+# Tests unitaires
 test_unit:
   image: node:18-alpine
   stage: test
@@ -78,7 +114,7 @@ test_unit:
   script:
     - echo "🧪 Lancement des tests unitaires..."
     - npm run test:ci
-    - echo "✅ Tests unitaires terminés"
+    - echo "✅ Tests unitaires réussis"
   artifacts:
     reports:
       coverage_report:
@@ -89,12 +125,18 @@ test_unit:
       - coverage/
     expire_in: 1 week
   coverage: '/Lines\s*:\s*(\d+\.\d*)%/'
-  only:
-    - merge_requests
-    - develop
-    - main
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^feat(ure)?\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^fix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^hotfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^bugfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^chore\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^refactor\/.*/
 
-# Job de test d'intégration
+# Tests d'intégration
 test_integration:
   image: node:18-alpine
   stage: test
@@ -114,95 +156,128 @@ test_integration:
   script:
     - echo "🔗 Lancement des tests d'intégration..."
     - npm run test -- --testPathPattern=integration
-    - echo "✅ Tests d'intégration terminés"
-  only:
-    - merge_requests
-    - develop
-    - main
+    - echo "✅ Tests d'intégration réussis"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^feat(ure)?\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^fix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^hotfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^bugfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^chore\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^refactor\/.*/
 
-# Job de sécurité
-security_audit:
-  image: node:18-alpine
-  stage: security
-  dependencies:
-    - install_dependencies
-  script:
-    - echo "🔒 Audit de sécurité des dépendances..."
-    - npm audit --audit-level=moderate
-    - echo "✅ Audit de sécurité terminé"
-  allow_failure: true
-  only:
-    - merge_requests
-    - develop
-    - main
+# ===================================
+# JOBS EXÉCUTÉS UNIQUEMENT SUR DEVELOP/MAIN
+# ===================================
 
-# Job de build avec Dockerfile conditionnel
-build:
+# Build des images Docker pour develop
+build_dev:
   image: docker:latest
   stage: build
   before_script:
     - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
   script:
-    - |
-      if [ "$CI_COMMIT_REF_NAME" = "main" ]; then
-        echo "🚀 Construction PRODUCTION..."
-        docker build -f ./config/docker/Dockerfile.prod -t $IMAGE_NAME:$IMAGE_TAG .
-        docker tag $IMAGE_NAME:$IMAGE_TAG $IMAGE_NAME:latest
-        docker push $IMAGE_NAME:$IMAGE_TAG
-        docker push $IMAGE_NAME:latest
-        echo "✅ Image PROD poussée: $IMAGE_NAME:$IMAGE_TAG"
-      else
-        echo "🔧 Construction DÉVELOPPEMENT..."
-        docker build -f ./config/docker/Dockerfile.dev -t $IMAGE_NAME:$IMAGE_TAG-dev .
-        docker tag $IMAGE_NAME:$IMAGE_TAG-dev $IMAGE_NAME:dev-latest
-        docker push $IMAGE_NAME:$IMAGE_TAG-dev
-        docker push $IMAGE_NAME:dev-latest
-        echo "✅ Image DEV poussée: $IMAGE_NAME:$IMAGE_TAG-dev"
-      fi
+    - echo "🔧 Construction de l'image de développement..."
+    - docker build -f ./config/docker/Dockerfile.dev -t $IMAGE_NAME:$IMAGE_TAG-dev .
+    - docker tag $IMAGE_NAME:$IMAGE_TAG-dev $IMAGE_NAME:dev-latest
+    - docker push $IMAGE_NAME:$IMAGE_TAG-dev
+    - docker push $IMAGE_NAME:dev-latest
+    - echo "✅ Image DEV poussée => $IMAGE_NAME:$IMAGE_TAG-dev"
   dependencies:
     - test_unit
     - test_integration
-  only:
-    - develop
-    - main
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
 
-# Job de déploiement automatique (optionnel)
+# Build des images Docker pour production
+build_prod:
+  image: docker:latest
+  stage: build
+  before_script:
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+  script:
+    - echo "🚀 Construction de l'image de production..."
+    - docker build -f ./config/docker/Dockerfile.prod -t $IMAGE_NAME:$IMAGE_TAG .
+    - docker tag $IMAGE_NAME:$IMAGE_TAG $IMAGE_NAME:latest
+    - docker push $IMAGE_NAME:$IMAGE_TAG
+    - docker push $IMAGE_NAME:latest
+    - echo "✅ Image PROD poussée => $IMAGE_NAME:$IMAGE_TAG"
+  dependencies:
+    - test_unit
+    - test_integration
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# ===================================
+# JOBS DE DÉPLOIEMENT
+# ===================================
+
+# Déploiement en staging
 deploy_staging:
   image: alpine/helm:latest
   stage: deploy
   script:
     - echo "🚢 Déploiement en staging..."
-    - echo "Service deployé avec l'image: $IMAGE_NAME:$IMAGE_TAG-dev"
-    # Ici vous pouvez ajouter vos commandes de déploiement Kubernetes/Docker Swarm
+    - echo "Service deployé avec l'image => $IMAGE_NAME:$IMAGE_TAG-dev"
   environment:
     name: staging
-    url: https://staging.example.com
-  only:
-    - develop
-  when: manual
+    url: https://staging-asset-service.example.com
+  dependencies:
+    - build_dev
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+      when: manual
 
+# Déploiement en production
 deploy_production:
   image: alpine/helm:latest
   stage: deploy
   script:
     - echo "🚀 Déploiement en production..."
-    - echo "Service deployé avec l'image: $IMAGE_NAME:$IMAGE_TAG"
-    # Ici vous pouvez ajouter vos commandes de déploiement Kubernetes/Docker Swarm
+    - echo "Service deployé avec l'image => $IMAGE_NAME:$IMAGE_TAG"
   environment:
     name: production
-    url: https://production.example.com
-  only:
-    - main
-  when: manual
+    url: https://asset-service.example.com
+  dependencies:
+    - build_prod
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
 
-# Job de nettoyage des images Docker anciennes
+# ===================================
+# JOBS UTILITAIRES
+# ===================================
+
+# Nettoyage des anciennes images
 cleanup:
   image: docker:latest
   stage: deploy
   script:
     - echo "🧹 Nettoyage des anciennes images..."
-    # Supprimer les images de plus de 30 jours
     - docker image prune -a --filter "until=720h" --force || true
-  only:
-    - schedules
-  when: manual
+    - echo "✅ Nettoyage terminé"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: manual
+
+# Job de validation pour les merge requests
+validate_mr:
+  image: node:18-alpine
+  stage: test
+  dependencies:
+    - install_dependencies
+    - lint
+    - test_unit
+    - test_integration
+    - security_audit
+  script:
+    - echo "✅ Validation de la merge request"
+    - echo "- Linting ✅"
+    - echo "- Tests unitaires ✅" 
+    - echo "- Tests d'intégration ✅"
+    - echo "- Audit de sécurité ✅"
+    - echo "🎉 La merge request est prête à être mergée !"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"

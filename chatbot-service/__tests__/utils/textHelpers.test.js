@@ -1,5 +1,4 @@
 describe('Text Helpers', () => {
-  // Simulation des fonctions internes du controller
   const countWords = (text) => {
     return text.trim().split(/\s+/).length;
   };
@@ -39,7 +38,7 @@ describe('Text Helpers', () => {
     test('devrait compter les mots correctement', () => {
       expect(countWords("Bonjour le monde")).toBe(3);
       expect(countWords("  Un   seul  mot  ")).toBe(3);
-      expect(countWords("")).toBe(1); // split retourne [""]
+      expect(countWords("")).toBe(1);
     });
   });
 
@@ -57,7 +56,7 @@ describe('Text Helpers', () => {
       const longText = "Ceci est un texte très long qui dépasse la limite de mots autorisés. Il contient plusieurs phrases et devrait être tronqué de manière intelligente. La troncature devrait préserver le sens.";
       const truncated = smartTruncate(longText, 10);
       
-      expect(countWords(truncated)).toBeLessThanOrEqual(11); // +1 pour "…"
+      expect(countWords(truncated)).toBeLessThanOrEqual(11);
       expect(truncated).toMatch(/…$/);
     });
 

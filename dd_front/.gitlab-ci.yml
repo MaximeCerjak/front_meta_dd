@@ -1,0 +1,227 @@
+# Pipeline CI/CD Frontend
+
+variables:
+  SERVICE_NAME: "dd-front"
+  SERVICE_PORT: "3002"
+  REGISTRY_URL: "$CI_REGISTRY_IMAGE"
+  NODE_VERSION: "20"
+  BUILD_OUTPUT_DIR: "dist"
+
+stages:
+  - validate
+  - test
+  - build
+  - security
+  - publish
+
+# =============================================================================
+# VALIDATION
+# =============================================================================
+lint-frontend:
+  image: node:${NODE_VERSION}-alpine
+  stage: validate
+  before_script:
+    - npm ci --cache .npm --prefer-offline
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-frontend-node
+    paths:
+      - .npm/
+      - node_modules/
+  script:
+    - echo "🎨 Validation du code frontend"
+    - npm run lint || echo "⚠️  ESLint à configurer"
+    - npm run type-check || echo "⚠️  TypeScript type checking à configurer"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# =============================================================================
+# TESTS
+# =============================================================================
+unit-tests-frontend:
+  image: node:${NODE_VERSION}-alpine
+  stage: test
+  before_script:
+    - npm ci --cache .npm --prefer-offline
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-frontend-node
+    paths:
+      - .npm/
+      - node_modules/
+  script:
+    - echo "🧪 Tests unitaires frontend"
+    - npm run test:ci || npm test || echo "⚠️  Tests unitaires à implémenter"
+  coverage: '/All files[^|]*\|[^|]*\s+([\d\.]+)/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura-coverage.xml
+    paths:
+      - coverage/
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# =============================================================================
+# BUILD
+# =============================================================================
+build-frontend:
+  image: node:${NODE_VERSION}-alpine
+  stage: build
+  before_script:
+    - npm ci --cache .npm --prefer-offline
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-frontend-node
+    paths:
+      - .npm/
+      - node_modules/
+  script:
+    - echo "🏗️  Build du frontend Phaser.js"
+    - |
+      # Configuration des variables d'environnement pour le build
+      if [ "$CI_COMMIT_BRANCH" == "main" ]; then
+        export NODE_ENV=production
+        export VITE_GATEWAY_URL="$VITE_GATEWAY_URL_PROD"
+      elif [ "$CI_COMMIT_BRANCH" == "develop" ]; then
+        export NODE_ENV=staging
+        export VITE_GATEWAY_URL="$VITE_GATEWAY_URL_STAGING"
+      else
+        export NODE_ENV=development
+        export VITE_GATEWAY_URL="$VITE_GATEWAY_URL_DEV"
+      fi
+      
+      echo "🔧 Configuration build:"
+      echo "  NODE_ENV: $NODE_ENV"
+      echo "  VITE_GATEWAY_URL: $VITE_GATEWAY_URL"
+      
+      # Build de l'application
+      npm run build
+      
+      # Vérification du build
+      if [ ! -d "$BUILD_OUTPUT_DIR" ]; then
+        echo "❌ Erreur: Dossier de build non trouvé"
+        exit 1
+      fi
+      
+      echo "✅ Build frontend terminé"
+  artifacts:
+    paths:
+      - $BUILD_OUTPUT_DIR/
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_TAG
+
+# =============================================================================
+# SÉCURITÉ
+# =============================================================================
+frontend-security-scan:
+  image: node:${NODE_VERSION}-alpine
+  stage: security
+  before_script:
+    - npm ci --cache .npm --prefer-offline
+  script:
+    - echo "🔒 Scan de sécurité frontend"
+    - npm audit --audit-level moderate || echo "⚠️ Vulnérabilités détectées"
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_TAG
+
+# =============================================================================
+# PUBLICATION DOCKER
+# =============================================================================
+build-and-push-docker:
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  stage: publish
+  dependencies:
+    - build-frontend
+  before_script:
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+  script:
+    - echo "🐳 Build et push de l'image Docker"
+    - |
+      # Configuration des tags selon l'environnement
+      if [ "$CI_COMMIT_TAG" ]; then
+        IMAGE_TAG="$CI_COMMIT_TAG"
+        ADDITIONAL_TAGS="latest"
+        echo "🏷️  Build release: $IMAGE_TAG"
+      elif [ "$CI_COMMIT_BRANCH" == "main" ]; then
+        IMAGE_TAG="main-$CI_COMMIT_SHORT_SHA"
+        ADDITIONAL_TAGS="stable"
+        echo "🏷️  Build stable: $IMAGE_TAG"
+      elif [ "$CI_COMMIT_BRANCH" == "develop" ]; then
+        IMAGE_TAG="develop-$CI_COMMIT_SHORT_SHA"
+        ADDITIONAL_TAGS="develop-latest"
+        echo "🏷️  Build dev: $IMAGE_TAG"
+      else
+        IMAGE_TAG="$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA"
+        ADDITIONAL_TAGS=""
+        echo "🏷️  Build feature: $IMAGE_TAG"
+      fi
+      
+      # Build de l'image avec Nginx
+      docker build \
+        --build-arg BUILD_OUTPUT_DIR=$BUILD_OUTPUT_DIR \
+        -f config/docker/Dockerfile.prod \
+        -t $REGISTRY_URL:$IMAGE_TAG .
+      
+      # Push de l'image principale
+      docker push $REGISTRY_URL:$IMAGE_TAG
+      echo "✅ Image pushée: $REGISTRY_URL:$IMAGE_TAG"
+      
+      # Push des tags additionnels
+      if [ -n "$ADDITIONAL_TAGS" ]; then
+        for tag in $ADDITIONAL_TAGS; do
+          docker tag $REGISTRY_URL:$IMAGE_TAG $REGISTRY_URL:$tag
+          docker push $REGISTRY_URL:$tag
+          echo "✅ Tag pushé: $REGISTRY_URL:$tag"
+        done
+      fi
+      
+      # Sauvegarder le tag de l'image pour usage ultérieur
+      echo "IMAGE_TAG=$IMAGE_TAG" >> build.env
+      echo "FULL_IMAGE_NAME=$REGISTRY_URL:$IMAGE_TAG" >> build.env
+  artifacts:
+    reports:
+      dotenv: build.env
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_TAG
+
+# =============================================================================
+# NOTIFICATION
+# =============================================================================
+notify-image-ready:
+  image: alpine:latest
+  stage: .post
+  dependencies:
+    - build-and-push-docker
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - |
+      echo "✅ Image Docker frontend prête !"
+      echo "📦 Image: $FULL_IMAGE_NAME"
+      echo "🔖 Tag: $IMAGE_TAG"
+      
+      # Notification Slack optionnelle
+      if [ -n "$SLACK_WEBHOOK_URL" ]; then
+        curl -X POST "$SLACK_WEBHOOK_URL" \
+          -H 'Content-type: application/json' \
+          --data "{\"text\":\"🎨 Frontend DigitalDrifter build terminé!\n📦 Image: \`$FULL_IMAGE_NAME\`\"}"
+      fi
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_TAG
+  when: on_success

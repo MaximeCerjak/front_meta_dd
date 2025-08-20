@@ -1,5 +1,5 @@
 import Map from '../models/Map.js';
-import Teleporter from '../models/Teleporter.js';
+// import Teleporter from '../models/Teleporter.js';
 
 // const validateFileExists = async (fileId) => {
 //     const response = await fetch(`http://localhost:4000/api/assets/${fileId}`);

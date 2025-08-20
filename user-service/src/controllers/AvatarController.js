@@ -62,5 +62,5 @@ export const createAvatar = async (req, res) => {
         console.error('Erreur lors de la création de l\'avatar :', error);
         res.status(500).json({ message: 'Error creating avatar', error });
     }
-}
+};
 

@@ -4,7 +4,6 @@ import { Router } from 'express';
 
 const router = Router();
 
-// Configuration OpenAPI
 const options = {
   definition: {
     openapi: '3.0.0',
@@ -18,8 +17,6 @@ const options = {
   apis: ['./src/routes/*.js'],
 };
 
-
-// Génération des spécifications OpenAPI
 const specs = swaggerJsdoc(options);
 
 console.log('OpenAPI Specs:', JSON.stringify(specs, null, 2));

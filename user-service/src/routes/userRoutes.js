@@ -42,7 +42,7 @@ const router = express.Router();
  *      500:
  *        description: Erreur serveur.
  */
-router.get('/', getAll)
+router.get('/', getAll);
 
 /**
  * @swagger
@@ -179,7 +179,7 @@ router.get('/anonym', getAnonymUser);
  *       500:
  *         description: Erreur serveur.
  */    
-router.get('/test', testToken)
+router.get('/test', testToken);
 
 /**
  * @swagger

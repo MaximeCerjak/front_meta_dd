@@ -3,13 +3,11 @@ set -e
 
 echo "🧪 Lancement de la suite de tests complète..."
 
-# Couleurs pour l'affichage
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Fonction pour afficher les messages colorés
 print_status() {
     echo -e "${GREEN}✅ $1${NC}"
 }
@@ -34,7 +32,6 @@ if ! command -v npm &> /dev/null; then
     exit 1
 fi
 
-# Installer les dépendances si nécessaire
 if [ ! -d "node_modules" ]; then
     print_warning "Installation des dépendances..."
     npm ci
@@ -51,7 +48,6 @@ npm audit --audit-level=moderate
 
 print_status "Tous les tests sont passés avec succès! 🎉"
 
-# Afficher un résumé du coverage
 echo ""
 echo "📊 Résumé du coverage:"
 if [ -f "coverage/lcov-report/index.html" ]; then

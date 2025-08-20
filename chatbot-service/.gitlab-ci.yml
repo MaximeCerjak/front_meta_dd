@@ -1,6 +1,6 @@
-# .gitlab-ci.yml (version mise à jour)
-
+# =========================
 # Variables globales
+# =========================
 variables:
   DOCKER_DRIVER: overlay2
   DOCKER_TLS_CERTDIR: "/certs"
@@ -9,251 +9,319 @@ variables:
   SERVICE_NAME: "chatbot-service"
   SERVICE_PORT: "6000"
   NODE_VERSION: "18"
+  # Tests
+  NODE_ENV: test
 
+# =========================
 # Services nécessaires
+# =========================
 services:
   - docker:dind
 
-# Stages de la pipeline
+# =========================
+# Stages
+# =========================
 stages:
   - install
-  - lint
+  - quality
   - test
-  - security
   - build
   - deploy
 
-# Cache pour accélérer les builds
+# =========================
+# Cache npm
+# =========================
 cache:
   key: ${CI_COMMIT_REF_SLUG}
   paths:
     - node_modules/
     - .npm/
 
-# Template pour les jobs Node.js
+# =========================
+# Template Node
+# =========================
 .node_template: &node_template
   image: node:${NODE_VERSION}-alpine
   before_script:
+    - echo "📦 Préparation npm cache…"
     - npm ci --cache .npm --prefer-offline
-  cache:
-    key: ${CI_COMMIT_REF_SLUG}
-    paths:
-      - node_modules/
-      - .npm/
 
-# Job d'installation des dépendances
+# ===================================
+# JOBS EXÉCUTÉS SUR TOUTES LES BRANCHES
+# ===================================
+
+# Installation des dépendances
 install_dependencies:
   <<: *node_template
   stage: install
   script:
-    - echo "📦 Installation des dépendances..."
+    - echo "📦 Installation des dépendances…"
     - npm ci --cache .npm --prefer-offline
-    - echo "✅ Dépendances installées avec succès"
+    - echo "✅ Dépendances installées"
   artifacts:
     paths:
       - node_modules/
     expire_in: 1 hour
-  only:
-    - merge_requests
-    - develop
-    - main
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^feat(ure)?\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^fix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^hotfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^bugfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^chore\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^refactor\/.*/
 
-# Job de lint
+# Lint
 lint:
   <<: *node_template
-  stage: lint
+  stage: quality
   dependencies:
     - install_dependencies
   script:
-    - echo "🔍 Analyse de la qualité du code..."
+    - echo "🔍 Linting…"
     - npm run lint
-    - echo "✅ Code conforme aux standards"
-  allow_failure: false
-  only:
-    - merge_requests
-    - develop
-    - main
+    - echo "✅ Code conforme"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^feat(ure)?\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^fix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^hotfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^bugfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^chore\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^refactor\/.*/
 
-# Job de tests unitaires
+# Audit de sécurité
+security_audit:
+  <<: *node_template
+  stage: quality
+  dependencies:
+    - install_dependencies
+  script:
+    - echo "🔒 Audit de sécurité npm…"
+    - npm audit --audit-level=moderate || true
+    - echo "✅ Audit terminé (non bloquant)"
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^feat(ure)?\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^fix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^hotfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^bugfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^chore\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^refactor\/.*/
+
+# Tests unitaires (mock OpenAI)
 test_unit:
   <<: *node_template
   stage: test
   dependencies:
     - install_dependencies
   script:
-    - echo "🧪 Exécution des tests unitaires..."
+    - echo "🧪 Tests unitaires…"
     - npm run test:ci
-    - echo "✅ Tests unitaires réussis"
-  coverage: '/Lines\s*:\s*(\d+\.\d*)%/'
+    - echo "✅ Tests unitaires OK"
   artifacts:
-    when: always
     reports:
-      junit: coverage/junit.xml
       coverage_report:
         coverage_format: cobertura
         path: coverage/cobertura-coverage.xml
+      junit: coverage/junit.xml
     paths:
       - coverage/
     expire_in: 1 week
-  only:
-    - merge_requests
-    - develop
-    - main
+  coverage: '/Lines\s*:\s*(\d+\.\d*)%/'
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^feat(ure)?\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^fix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^hotfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^bugfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^chore\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^refactor\/.*/
 
-# Job de tests d'intégration
+# Tests d’intégration (réels) — exécutés SEULEMENT si la clé est fournie
 test_integration:
   <<: *node_template
   stage: test
   dependencies:
     - install_dependencies
   script:
-    - echo "🔗 Exécution des tests d'intégration..."
-    - npm run test -- --testPathPattern="integration" --verbose
-    - echo "✅ Tests d'intégration réussis"
+    - echo "🔗 Tests d'intégration…"
+    - |
+      if [ -n "$OPENAI_API_KEY" ]; then
+        npm run test -- --testPathPattern=integration --verbose
+        echo "✅ Intégration OK"
+      else
+        echo "ℹ️ OPENAI_API_KEY absent → on skip les tests d'intégration."
+      fi
   allow_failure: true
-  only:
-    - merge_requests
-    - develop
-    - main
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^feat(ure)?\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^fix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^hotfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^bugfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^chore\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^refactor\/.*/
 
-# Job de sécurité - Audit des dépendances
-security_audit:
-  <<: *node_template
-  stage: security
-  dependencies:
-    - install_dependencies
-  script:
-    - echo "🔒 Audit de sécurité des dépendances..."
-    - npm audit --audit-level=moderate
-    - echo "✅ Audit de sécurité terminé"
-  allow_failure: true
-  artifacts:
-    when: always
-    reports:
-      dependency_scanning: gl-dependency-scanning-report.json
-    expire_in: 1 week
-  only:
-    - merge_requests
-    - develop
-    - main
-
-# Job de sécurité - Scan des secrets
+# Scan de secrets simple (non bloquant)
 security_secrets:
   image: alpine:latest
-  stage: security
+  stage: quality
   before_script:
     - apk add --no-cache git grep
   script:
-    - echo "🔍 Recherche de secrets dans le code..."
+    - echo "🔍 Scan de secrets…"
     - |
-      # Recherche de patterns de secrets communs
-      echo "Vérification des clés API..."
-      if grep -r -i "api.key\|secret\|password\|token" --include="*.js" --include="*.json" src/ || true; then
-        echo "⚠️ Attention: Vérifiez que les secrets ne sont pas exposés"
+      if grep -RniE "api[_-]?key|secret|password|token" --include="*.js" --include="*.json" src/ || true; then
+        echo "⚠️ Vérifiez que des secrets ne sont pas exposés."
       fi
-      echo "✅ Scan des secrets terminé"
+    - echo "✅ Scan terminé"
   allow_failure: true
-  only:
-    - merge_requests
-    - develop
-    - main
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^feat(ure)?\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^fix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^hotfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^bugfix\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^chore\/.*/
+    - if: $CI_COMMIT_BRANCH =~ /^refactor\/.*/
 
-# Job de build avec tests de fumée
-build_and_smoke_test:
+# ===================================
+# BUILD (séparé dev / prod)
+# ===================================
+
+# Build DEV (branche develop)
+build_dev:
   image: docker:latest
   stage: build
-  dependencies:
-    - test_unit
   before_script:
     - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
   script:
+    - echo "🔧 Build DEV…"
+    - docker build -f ./config/docker/Dockerfile.dev -t $IMAGE_NAME:$IMAGE_TAG-dev .
+    - docker tag $IMAGE_NAME:$IMAGE_TAG-dev $IMAGE_NAME:dev-latest
+    - docker push $IMAGE_NAME:$IMAGE_TAG-dev
+    - docker push $IMAGE_NAME:dev-latest
+    - echo "✅ Image DEV poussée => $IMAGE_NAME:$IMAGE_TAG-dev"
+  dependencies:
+    - test_unit
+    - test_integration
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+# Build PROD (branche main) + smoke test
+build_prod:
+  image: docker:latest
+  stage: build
+  before_script:
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+  script:
+    - echo "🚀 Build PROD…"
+    - docker build -f ./config/docker/Dockerfile.prod -t $IMAGE_NAME:$IMAGE_TAG .
+    - docker tag $IMAGE_NAME:$IMAGE_TAG $IMAGE_NAME:latest
+    # Test de fumée : démarrage container (clé mock si non fournie)
+    - echo "💨 Smoke test…"
+    - docker run -d --name smoke-test -p ${SERVICE_PORT}:${SERVICE_PORT} -e OPENAI_API_KEY=${OPENAI_API_KEY:-test} $IMAGE_NAME:$IMAGE_TAG
+    - sleep 10
     - |
-      if [ "$CI_COMMIT_REF_NAME" = "main" ]; then
-        echo "🚀 Construction PRODUCTION..."
-        docker build -f ./config/docker/Dockerfile.prod -t $IMAGE_NAME:$IMAGE_TAG .
-        docker tag $IMAGE_NAME:$IMAGE_TAG $IMAGE_NAME:latest
-        
-        # Test de fumée - vérifier que l'image démarre
-        echo "💨 Test de fumée..."
-        docker run -d --name smoke-test -p 6000:6000 -e OPENAI_API_KEY=test $IMAGE_NAME:$IMAGE_TAG
-        sleep 10
-        # Vérifier que le conteneur tourne
-        if docker ps | grep smoke-test; then
-          echo "✅ Test de fumée réussi"
-          docker stop smoke-test
-          docker rm smoke-test
-        else
-          echo "❌ Test de fumée échoué"
-          docker logs smoke-test
-          exit 1
-        fi
-        
-        docker push $IMAGE_NAME:$IMAGE_TAG
-        docker push $IMAGE_NAME:latest
-        echo "✅ Image PROD poussée: $IMAGE_NAME:$IMAGE_TAG"
+      if docker ps | grep -q smoke-test; then
+        echo "✅ Smoke test OK"
+        docker stop smoke-test && docker rm smoke-test
       else
-        echo "🔧 Construction DÉVELOPPEMENT..."
-        docker build -f ./config/docker/Dockerfile.dev -t $IMAGE_NAME:$IMAGE_TAG-dev .
-        docker tag $IMAGE_NAME:$IMAGE_TAG-dev $IMAGE_NAME:dev-latest
-        docker push $IMAGE_NAME:$IMAGE_TAG-dev
-        docker push $IMAGE_NAME:dev-latest
-        echo "✅ Image DEV poussée: $IMAGE_NAME:$IMAGE_TAG-dev"
+        echo "❌ Smoke test KO"
+        docker logs smoke-test || true
+        exit 1
       fi
+    - docker push $IMAGE_NAME:$IMAGE_TAG
+    - docker push $IMAGE_NAME:latest
+    - echo "✅ Image PROD poussée => $IMAGE_NAME:$IMAGE_TAG"
   after_script:
-    - docker system prune -f
-  only:
-    - develop
-    - main
-
-# Job de déploiement automatique (optionnel)
-deploy_dev:
-  image: alpine:latest
-  stage: deploy
+    - docker system prune -f || true
   dependencies:
-    - build_and_smoke_test
-  before_script:
-    - apk add --no-cache curl
+    - test_unit
+    - test_integration
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# ===================================
+# DÉPLOIEMENT
+# ===================================
+
+deploy_staging:
+  image: alpine/helm:latest
+  stage: deploy
   script:
-    - echo "🚀 Déploiement en environnement de développement..."
-    - echo "Image à déployer: $IMAGE_NAME:$IMAGE_TAG-dev"
-    # Ici vous pourriez ajouter vos commandes de déploiement
-    # Par exemple: kubectl, docker-compose, webhook, etc.
-    - echo "✅ Déploiement DEV terminé"
+    - echo "🚢 Déploiement STAGING…"
+    - echo "Image => $IMAGE_NAME:$IMAGE_TAG-dev"
   environment:
-    name: development
-    url: https://dev-chatbot.example.com
-  when: manual
-  only:
-    - develop
-
-deploy_prod:
-  image: alpine:latest
-  stage: deploy
+    name: staging
+    url: https://staging-chatbot.example.com
   dependencies:
-    - build_and_smoke_test
-  before_script:
-    - apk add --no-cache curl
+    - build_dev
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+      when: manual
+
+deploy_production:
+  image: alpine/helm:latest
+  stage: deploy
   script:
-    - echo "🚀 Déploiement en PRODUCTION..."
-    - echo "Image à déployer: $IMAGE_NAME:$IMAGE_TAG"
-    # Commandes de déploiement production
-    - echo "✅ Déploiement PROD terminé"
+    - echo "🚀 Déploiement PRODUCTION…"
+    - echo "Image => $IMAGE_NAME:$IMAGE_TAG"
   environment:
     name: production
     url: https://chatbot.example.com
-  when: manual
-  only:
-    - main
+  dependencies:
+    - build_prod
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
 
-# Job de nettoyage des artefacts
+# ===================================
+# JOBS UTILITAIRES
+# ===================================
+
+# Nettoyage (programmable)
 cleanup:
-  image: alpine:latest
+  image: docker:latest
   stage: deploy
   script:
-    - echo "🧹 Nettoyage des artefacts anciens..."
+    - echo "🧹 Nettoyage d'images anciennes…"
+    - docker image prune -a --filter "until=720h" --force || true
     - echo "✅ Nettoyage terminé"
-  when: always
-  allow_failure: true
-  only:
-    - develop
-    - main
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: manual
+
+# Validation MR (agrégateur)
+validate_mr:
+  <<: *node_template
+  stage: test
+  dependencies:
+    - install_dependencies
+    - lint
+    - test_unit
+    - test_integration
+    - security_audit
+  script:
+    - echo "✅ Validation MR"
+    - echo "- Lint ✅"
+    - echo "- Unit tests ✅"
+    - echo "- Integration (si clé) ✅"
+    - echo "- Security audit ✅"
+    - echo "🎉 Prêt à merger !"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"

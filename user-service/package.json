@@ -11,8 +11,8 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:verbose": "jest --coverage --verbose",
-    "lint": "eslint src/",
-    "lint:fix": "eslint src/ --fix",
+    "lint": "eslint src/ --ext .js,.jsx",
+    "lint:fix": "eslint src/ --fix --ext .js,.jsx",
     "security:audit": "npm audit",
     "docker:build": "docker build -t user-service .",
     "docker:run": "docker run -p 3000:3000 user-service"

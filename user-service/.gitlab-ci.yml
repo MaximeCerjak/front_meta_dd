@@ -30,7 +30,7 @@ lint:
   stage: lint
   script:
     - npm install --dev
-    - npx eslint . || echo "ESLint non configuré, passage du lint"
+    - npm run lint || echo "ESLint non configuré, passage du lint"
   only:
     - merge_requests
     - develop

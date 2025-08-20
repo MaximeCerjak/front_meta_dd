@@ -1,5 +1,3 @@
-// routes/multiChatSimulatorRoutes.js
-
 /**
  * @swagger
  * tags:
@@ -132,7 +130,10 @@ router.post('/spontaneous', generateSpontaneousMessage);
  *       500:
  *         description: Erreur de génération (utilise un fallback)
  */
-router.post('/response', generateResponseToUser);
+router.post('/response', (req, res, next) => {
+    console.log('🎯 Route /response appelée avec:', req.body);
+    next();
+}, generateResponseToUser);
 
 /**
  * @swagger

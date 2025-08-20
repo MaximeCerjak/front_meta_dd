@@ -8,13 +8,13 @@ import cors from 'cors';
 
 dotenv.config();
 
-const FRONT_URL = "http://localhost:3002"; 
+const FRONT_URL = process.env.FRONT_URL || 'http://localhost:3002';
 
 // Configuration de CORS
 const corsOptions = {
-    origin: [FRONT_URL], // Origine autorisée (le frontend)
-    methods: ['GET'], // Méthodes autorisées
-    allowedHeaders: ['Content-Type', 'Authorization'], // Headers autorisés
+    origin: [FRONT_URL],
+    methods: ['GET'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
 const app = express();

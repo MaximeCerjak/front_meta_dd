@@ -41,15 +41,12 @@ export const generateResponseToUserMessage = async (userMessage, conversationCon
 
         const response = await axios.post(`${CHATBOT_SERVICE_URL}/multiplayer/response`, payload);
         
-        return {
-            playerId: response.data.playerId,
-            playerName: response.data.playerName,
-            playerAvatar: response.data.playerAvatar,
-            message: response.data.message,
-            type: response.data.type || 'response',
-            respondingTo: response.data.respondingTo,
-            timestamp: response.data.timestamp || new Date().toISOString()
-        };
+        console.log('📥 Gateway Service: Données reçues du chatbot-service:', response.data);
+        console.log('📊 Gateway Service: Type des données:', typeof response.data);
+        console.log('📋 Gateway Service: Clés des données:', Object.keys(response.data));
+        
+        return response.data;
+        
     } catch (error) {
         console.error("Error getting response to user message (Gateway Service):", error.response?.data || error.message);
         throw error;

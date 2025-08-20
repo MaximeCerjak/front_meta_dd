@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import File from '../models/File.js';
 
-// Définir les scopes et types valides
+// Définition des scopes et types valides
 const validScopes = ['game', 'user'];
 const validTypes = ['audios', 'images', 'videos', 'documents', 'json'];
 const validCategories = {
@@ -68,7 +68,7 @@ const validateJSON = (filePath) => {
             throw new Error('Invalid JSON structure for Tiled map.');
         }
     } catch (err) {
-        throw new Error('Invalid JSON file.');
+        throw new Error('Invalid JSON file. Error: ' + err.message);
     }
 };
 
@@ -184,7 +184,7 @@ export const listFileById = async (req, res) => {
     } catch (error) {
         res.status(500).send({ message: 'Error retrieving file.', error: error.message });
     }
-}
+};
 
 export const listFilesByScope = async (req, res) => {
     const { scope } = req.params;
@@ -250,7 +250,6 @@ export const deleteFile = async (req, res) => {
                 return res.status(404).send({ message: 'File not found on disk.', error: err.message });
             }
 
-            // Supprimer l'enregistrement de la base de données
             await fileRecord.destroy();
             res.status(200).send({ message: 'File deleted successfully.' });
         });
